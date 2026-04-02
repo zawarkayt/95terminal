@@ -12,7 +12,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Авто-создание таблицы (как просил)
 const initDB = async () => {
   try {
     await pool.query(`
@@ -28,7 +27,6 @@ const initDB = async () => {
 };
 initDB();
 
-// API Эндпоинты
 app.get('/api/wallet/:card', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM wallets WHERE card_number = $1', [req.params.card]);
   res.json(rows[0] || { error: "Not found" });
@@ -37,20 +35,23 @@ app.get('/api/wallet/:card', async (req, res) => {
 app.post('/api/update', async (req, res) => {
   const { card, amount, mode } = req.body;
   const { rows } = await pool.query('SELECT balance FROM wallets WHERE card_number = $1', [card]);
+  if(!rows.length) return res.status(404).json({error: "No card"});
   let current = parseFloat(rows[0].balance);
   let val = parseFloat(amount);
-  mode === 'pay' ? (current -= val) : (current += val);
+  if (mode === 'pay') {
+    if (current < val) return res.status(400).json({error: "No money"});
+    current -= val;
+  } else {
+    current += val;
+  }
   await pool.query('UPDATE wallets SET balance = $1 WHERE card_number = $2', [current, card]);
   res.json({ success: true, newBalance: current });
 });
 
-// РАЗДАЧА ФРОНТЕНДА
-// После npm run build папка build появится в корне
 app.use(express.static(path.join(__dirname, 'build')));
-
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Femboy Server on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server pink running on ${PORT}`));
