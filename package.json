@@ -1,11 +1,7 @@
 {
-  "name": "femboy-terminal-all-in-one",
+  "name": "femboy-terminal",
   "version": "1.0.0",
-  "scripts": {
-    "start": "node server.js",
-    "build": "react-scripts build",
-    "install-all": "npm install && npm install react react-dom react-scripts express pg cors"
-  },
+  "private": true,
   "dependencies": {
     "express": "^4.18.2",
     "pg": "^8.11.0",
@@ -13,6 +9,10 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "build": "react-scripts build"
   },
   "browserslist": {
     "production": [">0.2%", "not dead", "not op_mini all"],
