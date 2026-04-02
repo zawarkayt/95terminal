@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import './App.css';
+import './App.css'; // <-- ВОТ ЭТА СТРОЧКА ВАЖНА ДЛЯ СТИЛЕЙ!
 
 function App() {
   const [myCard, setMyCard] = useState(localStorage.getItem('card_number') || null);
   const [balance, setBalance] = useState(0);
   const [amount, setAmount] = useState('');
   const [status, setStatus] = useState('Nyan Bank Active');
+  const [forceTerminal, setForceTerminal] = useState(localStorage.getItem('force_terminal') === 'true');
 
-  // Определение устройств
+  // ДЕТЕКТОР УСТРОЙСТВ (добавил A202 - это частый код для A20e)
   const ua = navigator.userAgent;
-  const isSamsungTerminal = ua.includes('SM-A20') || ua.includes('Samsung'); 
+  const isSamsungTerminal = forceTerminal || ua.includes('SM-A20') || ua.includes('A202') || ua.includes('SamsungBrowser'); 
   const isMyIPhone = ua.includes('iPhone');
 
   useEffect(() => {
@@ -19,8 +20,11 @@ function App() {
   const fetchBalance = () => {
     fetch(`/api/wallet/${myCard}`).then(r => r.json()).then(data => {
       if (data.card_number) setBalance(data.balance);
-      else setMyCard(null);
-    });
+      else {
+        localStorage.removeItem('card_number');
+        setMyCard(null);
+      }
+    }).catch(() => setStatus("Ошибка сети"));
   };
 
   const createAcc = async () => {
@@ -56,13 +60,12 @@ function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ card: cardNum, amount, mode: 'pay' })
           });
-          if (res.ok) setStatus("Оплачено! Мяу! ✨");
-          else setStatus("Ошибка платежа");
+          setStatus(res.ok ? "Оплачено! Мяу! ✨" : "Ошибка платежа");
           setAmount('');
         };
       } catch (e) { setStatus("NFC Error"); }
     } else {
-      const test = prompt("NFC не найден. Номер карты:");
+      const test = prompt("NFC не работает тут. Введи номер карты вручную:");
       if (test) {
         const res = await fetch('/api/update', {
           method: 'POST',
@@ -74,32 +77,41 @@ function App() {
     }
   };
 
+  // Ручное включение терминала (если детектор тупит)
+  const toggleTerminal = () => {
+    const newState = !forceTerminal;
+    setForceTerminal(newState);
+    localStorage.setItem('force_terminal', newState);
+  };
+
   return (
     <div className="box">
       <div className="glass">
         {isSamsungTerminal ? (
           <div className="terminal-ui">
             <h2>📟 TERMINAL A20e</h2>
-            <input type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
+            <input type="number" placeholder="Сумма: 0.00 $" value={amount} onChange={e => setAmount(e.target.value)} />
             <button className="btn pink" onClick={payNFC}>ОПЛАТИТЬ</button>
             <p>{status}</p>
+            {/* Кнопка выхода из ручного терминала */}
+            {forceTerminal && <button onClick={toggleTerminal} style={{marginTop: '20px', background: 'transparent', color: '#fff', border: '1px solid white'}}>Выйти из терминала</button>}
           </div>
         ) : (
           <div className="user-ui">
             {!myCard ? (
-              <button className="btn pink" onClick={createAcc}>СОЗДАТЬ КАРТУ</button>
+              <button className="btn pink" onClick={createAcc}>✨ СОЗДАТЬ КАРТУ</button>
             ) : (
               <>
                 <h2>{isMyIPhone ? "👑 ADMIN" : "💖 USER"}</h2>
                 <div className="card-plate">
-                  <small>NUMBER</small>
+                  <small>CARD NUMBER</small>
                   <div>{myCard}</div>
                 </div>
                 <div className="money">{parseFloat(balance).toFixed(2)} $</div>
                 
                 {isMyIPhone && (
                   <div className="admin-zone">
-                    <input type="number" value={amount} onChange={e => setAmount(e.target.value)} />
+                    <input type="number" placeholder="Сумма" value={amount} onChange={e => setAmount(e.target.value)} />
                     <div className="row">
                       <button onClick={() => handleAdmin('add')}>+</button>
                       <button onClick={() => handleAdmin('pay')}>-</button>
@@ -108,8 +120,13 @@ function App() {
                 )}
               </>
             )}
+            {/* СЕКРЕТНАЯ КНОПКА ДЛЯ ВКЛЮЧЕНИЯ ТЕРМИНАЛА */}
+            <button onClick={toggleTerminal} style={{marginTop: '30px', background: 'none', border: 'none', color: 'gray', fontSize: '10px'}}>Force Terminal Mode</button>
           </div>
         )}
+        
+        {/* ДЕБАГ: Вывод инфы о браузере, чтобы понять почему он не узнал Самсунг */}
+        <p style={{fontSize: '8px', color: 'gray', marginTop: '20px', wordBreak: 'break-all'}}>{navigator.userAgent}</p>
       </div>
     </div>
   );
