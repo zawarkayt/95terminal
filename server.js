@@ -47,11 +47,14 @@ app.post('/api/update', async (req, res) => {
   await pool.query('UPDATE wallets SET balance = $1 WHERE card_number = $2', [current, card]);
   res.json({ success: true, newBalance: current });
 });
+// Раздача фронтенда
+const buildPath = path.join(__dirname, 'build');
+app.use(express.static(buildPath));
 
-app.use(express.static(path.join(__dirname, 'build')));
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+  res.sendFile(path.join(buildPath, 'index.html'));
 });
+
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server pink running on ${PORT}`));
