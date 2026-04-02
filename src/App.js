@@ -1,78 +1,98 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
-const MY_CARD = "123456";
-
 function App() {
+  const [myCard, setMyCard] = useState(localStorage.getItem('card_number') || null);
   const [balance, setBalance] = useState(0);
   const [amount, setAmount] = useState('');
-  const [isIphone, setIsIphone] = useState(false);
-  const [msg, setMsg] = useState('System ready');
+  const [status, setStatus] = useState('Welcome~');
+  
+  const isSamsung = navigator.userAgent.includes('SM-A20'); // Детект терминала
 
   useEffect(() => {
-    if (navigator.userAgent.includes('iPhone')) setIsIphone(true);
-    refresh();
-  }, []);
+    if (myCard) refreshBalance();
+  }, [myCard]);
 
-  const refresh = () => {
-    fetch(`/api/wallet/${MY_CARD}`)
+  const refreshBalance = () => {
+    fetch(`/api/wallet/${myCard}`)
       .then(r => r.json())
-      .then(data => setBalance(data.balance || 0))
-      .catch(() => setMsg("Connection error"));
+      .then(data => setBalance(data.balance))
+      .catch(() => setStatus("Ошибка связи"));
   };
 
-  const action = async (mode) => {
-    if (!amount || amount <= 0) return;
-    const res = await fetch(`/api/update`, {
+  const registerBank = async () => {
+    const res = await fetch('/api/register', { method: 'POST' });
+    const data = await res.json();
+    localStorage.setItem('card_number', data.card_number);
+    setMyCard(data.card_number);
+    setBalance(data.balance);
+    setStatus("Карта создана! Запиши номер на NFC!");
+  };
+
+  const handleNFCPayment = async () => {
+    setStatus("Приложите NFC тег...");
+    try {
+      const ndef = new window.NDEFReader();
+      await ndef.scan();
+      ndef.onreading = async ({ message }) => {
+        const decoder = new TextDecoder();
+        // Предполагаем, что на теге записан 6-значный номер текстом
+        const cardFromTag = decoder.decode(message.records[0].data);
+        
+        const res = await fetch('/api/pay', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ card: cardFromTag, amount })
+        });
+        const result = await res.json();
+        
+        if (res.ok) setStatus(`Оплачено! Остаток: ${result.newBalance}$`);
+        else setStatus("Ошибка: " + result.error);
+      };
+    } catch (e) {
+      setStatus("NFC не найден. Введите номер вручную (тест):");
+      const testCard = prompt("Введите номер карты с тега:");
+      processManual(testCard);
+    }
+  };
+
+  const processManual = async (c) => {
+    const res = await fetch('/api/pay', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ card: MY_CARD, amount, mode })
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ card: c, amount })
     });
-    if (res.ok) {
-      setAmount('');
-      refresh();
-      setMsg(mode === 'add' ? 'Added! ^_^' : 'Paid! Nya~');
-    } else {
-      setMsg('Error/No funds');
-    }
-  };
-
-  const handleNFC = async () => {
-    setMsg("Scanning NFC...");
-    if ('NDEFReader' in window) {
-      try {
-        const ndef = new window.NDEFReader();
-        await ndef.scan();
-        ndef.onreading = () => action('pay');
-      } catch (e) { setMsg("NFC Error: " + e); }
-    } else {
-      setTimeout(() => action('pay'), 1000); // Эмуляция для тестов
-    }
+    const result = await res.json();
+    setStatus(res.ok ? "Успех!" : "Ошибка: " + result.error);
   };
 
   return (
     <div className="app-container">
       <div className="glass-card">
-        <div className="header-pink">{isIphone ? "💖 Admin Hub" : "📟 Terminal"}</div>
-        <div className="balance-box">
-          <p>Balance</p>
-          <h1>{parseFloat(balance).toFixed(2)} $</h1>
-        </div>
-        <input 
-          type="number" 
-          placeholder="Amount..." 
-          value={amount} 
-          onChange={e => setAmount(e.target.value)}
-        />
-        {isIphone ? (
-          <div className="btn-stack">
-            <button className="btn add" onClick={() => action('add')}>Add</button>
-            <button className="btn sub" onClick={() => action('pay')}>Deduct</button>
+        {isSamsung ? (
+          <div className="terminal">
+            <h2>📟 TERMINAL A20</h2>
+            <input type="number" placeholder="Сумма к оплате" value={amount} onChange={e => setAmount(e.target.value)} />
+            <button className="btn nfc" onClick={handleNFCPayment}>СЧИТАТЬ NFC</button>
           </div>
         ) : (
-          <button className="btn nfc" onClick={handleNFC}>TAP NFC TAG</button>
+          <div className="user-bank">
+            {!myCard ? (
+              <button className="btn add" onClick={registerBank}>✨ ОТКРЫТЬ БАНК-АККАУНТ</button>
+            ) : (
+              <>
+                <h2>💖 MY BANK</h2>
+                <div className="card-info">
+                  <p>CARD NUMBER</p>
+                  <code>{myCard}</code>
+                </div>
+                <h1>{parseFloat(balance).toFixed(2)} $</h1>
+                <p>Запиши этот номер на свой NFC тег!</p>
+              </>
+            )}
+          </div>
         )}
-        <p className="footer-msg">{msg}</p>
+        <p className="status-text">{status}</p>
       </div>
     </div>
   );
